@@ -1,0 +1,57 @@
+#!/bin/bash
+
+#The value you give qterminal for size doesn't match the size you get back
+#The magic number is how much bigger the terminal is
+magic_number_h="35"
+magic_number_w="10"
+
+#Get the id of the opening terminal for later closing
+original_terminal=$(xdotool search --onlyvisible --class "QTerminal" | awk '{print $1;exit}')
+
+#Get the current monitor dimensions from the xrandr command
+dimensions=$(xrandr | grep -E -o '\bcurrent [0-9]+\sx\s[0-9]+\b')
+height=$(echo $dimensions | awk '{ print $4 }')
+width=$(echo $dimensions | awk '{ print $2 }')
+
+
+#Get the height of the toolbar
+toolbar_h=$(cat ~/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml | grep -E 'name="size"' | grep -Eo '[0-9]+')
+
+
+#Subtract the toolbar from the height and magic numbers from both to get the screen space
+final_h=$((($height-$toolbar_h)-$magic_number_h*2))
+final_w=$(($width-($magic_number_w*2)))
+
+#Screen space / 2 to get the dimensions for each terminal
+t_height=$(($final_h/2))
+t_width=$(($final_w/2))
+
+
+#Change The Config, Spawn the Terminal, and Disown so the Original Terminal can be closed
+sed -i "s/^size=@Size(.*)$/size=@Size($t_width $t_height)/" ~/.config/qterminal.org/qterminal.ini 
+sed -i "s/^pos=@Point(.*)$/pos=@Point(0 $toolbar_h)/" ~/.config/qterminal.org/qterminal.ini
+qterminal &
+disown
+sleep 0.1 &&
+
+#Second terminal
+sed -i "s/^pos=@Point(.*)$/pos=@Point(0 $final_h)/" ~/.config/qterminal.org/qterminal.ini
+qterminal &
+disown
+sleep 0.1 &&
+
+#Third terminal
+sed -i "s/^pos=@Point(.*)$/pos=@Point($final_w $final_h)/" ~/.config/qterminal.org/qterminal.ini
+qterminal & 
+disown
+sleep 0.1 &&
+
+#Spawn Mousepad, get it's id and then move and resize it with xdotool
+mousepad &
+window=$(xdotool search --onlyvisible --name mousepad | awk '{print $1;exit}')
+xdotool windowsize $window $t_width $t_height
+xdotool windowmove $window $((width/2)) $toolbar_h 
+
+#Focus the Original Spawning Terminal and then Kill it
+xdotool windowfocus $original_terminal
+xdotool windowkill $original_terminal
